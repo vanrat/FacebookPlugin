@@ -4,8 +4,8 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.Iterator;
 
-import org.apache.cordova.api.Plugin;
-import org.apache.cordova.api.PluginResult;
+import org.apache.cordova.CallbackContext;
+import org.apache.cordova.CordovaPlugin;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -21,7 +21,7 @@ import com.facebook.android.Facebook;
 import com.facebook.android.Facebook.DialogListener;
 import com.facebook.android.FacebookError;
 
-public class ConnectPlugin extends Plugin {
+public class ConnectPlugin extends CordovaPlugin {
 
     public static final String SINGLE_SIGN_ON_DISABLED = "service_disabled";
     private final String TAG = "ConnectPlugin";
@@ -30,14 +30,12 @@ public class ConnectPlugin extends Plugin {
     private String userId;
     //used for dialog auth
     private String[] permissions = new String[] {};
-    private String callbackId;
+   private CallbackContext callbackContext;
     private Bundle paramBundle;
     private String method;
 
     @Override
-    public PluginResult execute(String action, JSONArray args, final String callbackId) {
-        PluginResult pr = new PluginResult(PluginResult.Status.NO_RESULT);
-        pr.setKeepCallback(true);
+    public boolean execute(String action, JSONArray args, final CallbackContext callbackContext) {
 
         if (action.equals("init")) {
             try {
@@ -70,15 +68,17 @@ public class ConnectPlugin extends Plugin {
                 }
 
                 if(facebook.isSessionValid() && this.userId != null) {
-                    return new PluginResult(PluginResult.Status.OK, this.getResponse());
+					callbackContext.success(this.getResponse());
+					return true;                    
                 }
                 else {
-                    return new PluginResult(PluginResult.Status.NO_RESULT);
+					callbackContext.success();
+					return true;
                 }
-            } catch (JSONException e) {
-               
+            } catch (JSONException e) {               
                 e.printStackTrace();
-                return new PluginResult(PluginResult.Status.ERROR, "Invalid JSON args used. expected a string as the first arg.");
+               callbackContext.error("Invalid JSON args used. expected a string as the first arg.");
+			   return false;
             }
         }
 
@@ -90,15 +90,15 @@ public class ConnectPlugin extends Plugin {
                     for (int i=0; i<args.length(); i++) {
                         permissions[i] = args.getString(i);
                     }
-                } catch (JSONException e1) {
-                   
+                } catch (JSONException e1) {                   
                     e1.printStackTrace();
-                    return new PluginResult(PluginResult.Status.ERROR, "Invalid JSON args used. Expected a string array of permissions.");
+				   callbackContext.error("Invalid JSON args used. Expected a string array of permissions.");
+				   return false;
                 }
                 cordova.setActivityResultCallback(this);
 //                this.ctx.setActivityResultCallback(this);
                 this.permissions = permissions;
-                this.callbackId = callbackId;
+                this.callbackContext = callbackContext;
                 Runnable runnable = new Runnable() {
                     public void run() {
                         me.facebook.authorize(cordova.getActivity(), me.permissions, new AuthorizeListener(me));
@@ -107,7 +107,8 @@ public class ConnectPlugin extends Plugin {
                 cordova.getActivity().runOnUiThread(runnable);
 //                this.ctx.runOnUiThread(runnable);
             } else {
-                pr = new PluginResult(PluginResult.Status.ERROR, "Must call init before login.");
+				callbackContext.error("Must call init before login.");
+				return false;
             }
         }
 
@@ -115,30 +116,33 @@ public class ConnectPlugin extends Plugin {
             if (facebook != null) {
                 try {
                     facebook.logout(cordova.getActivity());
-
                     SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this.cordova.getActivity());
                     prefs.edit().putLong("access_expires", -1).commit();
                     prefs.edit().putString("access_token", null).commit();
-                } catch (MalformedURLException e) {
-                   
+                } catch (MalformedURLException e) {                   
                     e.printStackTrace();
-                    pr = new PluginResult(PluginResult.Status.MALFORMED_URL_EXCEPTION, "Error logging out.");
-                } catch (IOException e) {
-                   
+					callbackContext.error("Error logging out : Malformed exception");
+					return false;
+                } catch (IOException e) {                   
                     e.printStackTrace();
-                    pr = new PluginResult(PluginResult.Status.IO_EXCEPTION, "Error logging out.");
+					callbackContext.error("Error logging out : IOException");
+					return false;
                 }
-                pr = new PluginResult(PluginResult.Status.OK, getResponse());
+                callbackContext.success(getResponse());
+				return true;
             } else {
-                pr = new PluginResult(PluginResult.Status.ERROR, "Must call init before logout.");
+				callbackContext.error("Must call init before logout.");
+				return false;
             }
         }
 
         else if (action.equals("getLoginStatus")) {
             if (facebook != null) {
-                pr = new PluginResult(PluginResult.Status.OK, getResponse());
+                callbackContext.success(getResponse());
+				return true;
             } else {
-                pr = new PluginResult(PluginResult.Status.ERROR, "Must call init before getLoginStatus.");
+	            callbackContext.error("Must call init before getLoginStatus.");
+				return false;
             }
         }
         
@@ -172,7 +176,7 @@ public class ConnectPlugin extends Plugin {
         			}
         		}
         		this.paramBundle =  new Bundle(collect);
-        		this.callbackId = callbackId;
+        		this.callbackContext = callbackContext;
         		Runnable runnable = new Runnable() {
         			public void run() {
         				me.facebook.dialog (me.cordova.getActivity(), me.method , me.paramBundle , new UIDialogListener(me));
@@ -181,12 +185,11 @@ public class ConnectPlugin extends Plugin {
         		cordova.getActivity().runOnUiThread(runnable);
 //        		this.ctx.runOnUiThread(runnable);
         	} else {
-        		pr = new PluginResult(PluginResult.Status.ERROR, "Must call init before showDialog.");
-        	}
-        	
+        		callbackContext.error("Must call init before showDialog.");
+				return false;
+        	}        	
         }
-
-        return pr;
+        return true;
     }
 
     @Override
@@ -237,22 +240,22 @@ public class ConnectPlugin extends Plugin {
 		public void onComplete(Bundle values) {
 			//  Handle a successful dialog
 			Log.d(TAG,values.toString());
-			this.fba.success(new PluginResult(PluginResult.Status.OK), this.fba.callbackId);
+			this.fba.callbackContext.success();
 		}
 
 		public void onFacebookError(FacebookError e) {
            Log.d(TAG, "facebook error");
-           this.fba.error("Facebook error: " + e.getMessage(), callbackId);
+           this.fba.callbackContext.error("Facebook error: " + e.getMessage());
        }
 
        public void onError(DialogError e) {
            Log.d(TAG, "other error");
-           this.fba.error("Dialog error: " + e.getMessage(), this.fba.callbackId);
+           this.fba.callbackContext.error("Dialog error: " + e.getMessage());
        }
 
        public void onCancel() {
            Log.d(TAG, "cancel");
-           this.fba.error("Cancelled", this.fba.callbackId);
+          this.fba.callbackContext.success("cancelled"); // error() ?
        }
 	}
 
@@ -280,16 +283,19 @@ public class ConnectPlugin extends Plugin {
                     try {
                         JSONObject o = new JSONObject(fba.facebook.request("/me"));
                         fba.userId = o.getString("id");
-                        fba.success(getResponse(), fba.callbackId);
+                        fba.callbackContext.success(getResponse());
                     } catch (MalformedURLException e) {
                         // TODO Auto-generated catch block
                         e.printStackTrace();
+						fba.callbackContext.error("MalformedUrlException : " + e.getMessage());
                     } catch (IOException e) {
                         // TODO Auto-generated catch block
                         e.printStackTrace();
+						fba.callbackContext.error("IOException : " + e.getMessage());
                     } catch (JSONException e) {
                         // TODO Auto-generated catch block
                         e.printStackTrace();
+						fba.callbackContext.error("JSONException : " + e.getMessage());
                     }
                 }
             });
@@ -298,17 +304,17 @@ public class ConnectPlugin extends Plugin {
 
         public void onFacebookError(FacebookError e) {
             Log.d(TAG, "facebook error");
-            this.fba.error("Facebook error: " + e.getMessage(), callbackId);
+            this.fba.callbackContext.error("Facebook error: " + e.getMessage());
         }
 
         public void onError(DialogError e) {
             Log.d(TAG, "other error");
-            this.fba.error("Dialog error: " + e.getMessage(), this.fba.callbackId);
+           this.fba.callbackContext.error("Dialog error: " + e.getMessage());
         }
 
         public void onCancel() {
             Log.d(TAG, "cancel");
-            this.fba.error("Cancelled", this.fba.callbackId);
+            this.fba.callbackContext.success("cancelled");
         }
     }
 }
