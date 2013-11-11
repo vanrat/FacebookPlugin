@@ -30,7 +30,7 @@ public class ConnectPlugin extends CordovaPlugin {
     private String userId;
     //used for dialog auth
     private String[] permissions = new String[] {};
-   private CallbackContext callbackContext;
+    private CallbackContext callbackContext;
     private Bundle paramBundle;
     private String method;
 
