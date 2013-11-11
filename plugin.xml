@@ -42,10 +42,10 @@
     <platform name="android">
 
         <config-file target="res/xml/config.xml" parent="/*">
-            <feature name="FacebookConnect">
-                <param name="com.phonegap.plugins.FacebookConnect" value="com.phonegap.plugins.FacebookConnectPlugin" />
-                <param name="onload" value="true" />
-            </feature>
+			<feature name="FacebookConnect">
+				<param name="android-package" value="org.apache.cordova.facebook.ConnectPlugin" />
+				<param name="onload" value="true" />
+			</feature>
         </config-file>
 
         <!-- res files -->
